@@ -1,0 +1,198 @@
+# ================= Flask Chatbot Webhook Backend ================= #
+import os
+import json
+from flask import Flask, request, make_response
+
+app = Flask(__name__)
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    req = request.get_json(silent=True, force=True)
+    print("Request:")
+    print(json.dumps(req, indent=4))
+
+    res = makeWebhookResult(req)
+    res = json.dumps(res, indent=4)
+    print(res)
+
+    r = make_response(res)
+    r.headers['Content-Type'] = 'application/json'
+    return r
+
+def makeWebhookResult(req):
+    action = req.get("result", {}).get("action")
+    if action not in ["no.item", "cloth.don", "donate.books"]:
+        return {}
+
+    ngo = {
+        'buddha colony': 'ngoA',
+        'patna': 'ngoB',
+        'boring road': 'ngoC',
+        'rps more': 'ngoD',
+        'dps more': 'ngoE'
+    }
+
+    result = req.get("result")
+    parameters = result.get("parameters", {})
+    location = parameters.get("address1")
+
+    speech = "Our " + ngo.get(location, "nearest NGO") + " will be contacting you soon."
+    return {
+        "speech": speech,
+        "displayText": speech,
+        "source": "apiai-online-donare"
+    }
+
+
+# ================= CO2 Dashboard GUI with All Graphs ================= #
+import pandas as pd
+import tkinter as tk
+from tkinter import ttk, messagebox
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+df = pd.read_csv("reduced_co2_data.csv")
+countries = sorted(df['country'].unique())
+
+# GUI setup
+root = tk.Tk()
+root.title("🌍 CO₂ Emission Dashboard")
+root.geometry("1080x800")
+
+tk.Label(root, text="Global CO₂ Emission Visualizer", font=("Helvetica", 18, "bold")).pack(pady=20)
+
+input_frame = tk.Frame(root)
+input_frame.pack()
+
+tk.Label(input_frame, text="Select Country:").grid(row=0, column=0)
+country_cb = ttk.Combobox(input_frame, values=countries, width=30)
+country_cb.set("India")
+country_cb.grid(row=0, column=1)
+
+tk.Label(input_frame, text="Start Year:").grid(row=1, column=0)
+year_start_entry = tk.Entry(input_frame, width=10)
+year_start_entry.insert(0, "2000")
+year_start_entry.grid(row=1, column=1, sticky="w")
+
+tk.Label(input_frame, text="End Year:").grid(row=1, column=2)
+year_end_entry = tk.Entry(input_frame, width=10)
+year_end_entry.insert(0, "2020")
+year_end_entry.grid(row=1, column=3, sticky="w")
+
+chart_frame = tk.Frame(root)
+chart_frame.pack(pady=20)
+
+def clear_chart():
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
+
+def get_filtered_df():
+    try:
+        country = country_cb.get()
+        start_year = int(year_start_entry.get())
+        end_year = int(year_end_entry.get())
+        if start_year > end_year:
+            raise ValueError("Start year must be ≤ End year.")
+        filtered = df[(df['country'] == country) & 
+                      (df['year'] >= start_year) & 
+                      (df['year'] <= end_year)]
+        return filtered
+    except ValueError:
+        messagebox.showerror("Invalid input", "Please enter valid year range.")
+        return pd.DataFrame()
+
+# ==== Buttons and Graph Functions ==== #
+def show_co2_chart():
+    filtered = get_filtered_df()
+    if filtered.empty:
+        return
+    clear_chart()
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(filtered['year'], filtered['co2'], marker='o', color='orange')
+    ax.set_title("CO₂ Emissions Over Time")
+    ax.set_xlabel("Year")
+    ax.set_ylabel("CO₂ Emissions")
+    ax.grid(True)
+    canvas = FigureCanvasTkAgg(fig, chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+def show_heatmap():
+    filtered = get_filtered_df()
+    if filtered.empty:
+        return
+    clear_chart()
+    pivot = filtered.pivot_table(index='country', columns='year', values='co2')
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.heatmap(pivot, cmap="YlOrRd", ax=ax)
+    ax.set_title("CO₂ Emissions Heatmap")
+    canvas = FigureCanvasTkAgg(fig, chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+def show_boxplot():
+    filtered = get_filtered_df()
+    if filtered.empty:
+        return
+    clear_chart()
+    fig, ax = plt.subplots(figsize=(6, 4))
+    sns.boxplot(x=filtered["co2_per_capita"], ax=ax, color="skyblue")
+    ax.set_title("CO₂ Per Capita Distribution")
+    canvas = FigureCanvasTkAgg(fig, chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+def show_temp_vs_co2():
+    filtered = get_filtered_df()
+    if filtered.empty or 'temperature' not in filtered.columns:
+        messagebox.showerror("Missing data", "Temperature column is missing.")
+        return
+    clear_chart()
+    fig, ax1 = plt.subplots(figsize=(8, 4))
+    ax2 = ax1.twinx()
+    ax1.bar(filtered['year'], filtered['co2'], color='blue', label='CO₂')
+    ax2.plot(filtered['year'], filtered['temperature'], color='red', marker='o', label='Temperature')
+    ax1.set_xlabel('Year')
+    ax1.set_ylabel('CO₂ (bar)', color='blue')
+    ax2.set_ylabel('Temperature (line)', color='red')
+    ax1.set_title("Temperature vs CO₂")
+    canvas = FigureCanvasTkAgg(fig, chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+def show_insight():
+    filtered = get_filtered_df()
+    if filtered.empty:
+        return
+    avg_co2 = filtered["co2"].mean()
+    avg_gdp = filtered["gdp"].mean()
+    insight = f"📊 Insight for {country_cb.get()} ({year_start_entry.get()}–{year_end_entry.get()}):\n"
+    insight += f"→ Average CO₂: {avg_co2:.2f} Mt\n"
+    insight += f"→ Average GDP: {avg_gdp:.2f} B$\n"
+    insight += f"→ Highest CO₂ Year: {filtered.loc[filtered['co2'].idxmax()]['year']}"
+    
+    clear_chart()
+    tk.Label(chart_frame, text=insight, font=("Courier", 12), justify="left", fg="darkgreen").pack()
+
+# ==== Button Setup ==== #
+tk.Button(root, text="Line Chart", command=show_co2_chart, bg="#4CAF50", fg="white", width=20).pack(pady=3)
+tk.Button(root, text="CO₂ Heatmap", command=show_heatmap, bg="#FF5722", fg="white", width=20).pack(pady=3)
+tk.Button(root, text="CO₂ Boxplot", command=show_boxplot, bg="#3F51B5", fg="white", width=20).pack(pady=3)
+#tk.Button(root, text="Temp vs CO₂", command=show_temp_vs_co2, bg="#9C27B0", fg="white", width=20).pack(pady=3)
+tk.Button(root, text="Get Insight", command=show_insight, bg="#009688", fg="white", width=20).pack(pady=3)
+
+# ==== Footer ==== #
+tk.Label(root, text="Made with 💡 by Chinmay | CO₂ Dashboard & Chatbot", font=("Arial", 10), fg="gray").pack(side="bottom", pady=10)
+
+
+# =================== Launcher =================== #
+if __name__ == '__main__':
+    mode = "gui"  # Change to "flask" to run chatbot backend
+
+    if mode == "flask":
+        port = int(os.getenv('PORT', 5000))
+        app.run(debug=True, port=port, host='0.0.0.0')
+    else:
+        
+        root.mainloop()
