@@ -1,4 +1,4 @@
-# ================= Flask Chatbot Webhook Backend ================= #
+# ================= Flask Chatbot Webhook Backend ================ #
 import os
 import json
 from flask import Flask, request, make_response
